@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: convoy
+      POSTGRES_PASSWORD: convoy
+      POSTGRES_DB: convoy
+    ports:
+      - "5432:5432"
+    volumes:
+      - convoy_pg_data:/var/lib/postgresql/data
+
+volumes:
+  convoy_pg_data:

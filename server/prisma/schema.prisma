@@ -1,0 +1,194 @@
+// Convoy data model — PostgreSQL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String?
+  provider     String?  // 'local' | 'google' | 'apple'
+  providerId   String?
+  createdAt    DateTime @default(now())
+
+  hostedConvoys Convoy[]        @relation("HostedConvoys")
+  memberships   ConvoyMember[]
+  messages      Message[]
+  expenses      Expense[]
+  expenseSessions ExpenseSession[]
+}
+
+model Convoy {
+  id            String   @id @default(uuid())
+  code          String   @unique // 6-char join code, e.g. K7R2M4
+  name          String
+  hostId        String
+  host          User     @relation("HostedConvoys", fields: [hostId], references: [id])
+  status        String   @default("planning") // planning | active | ended
+
+  startLabel    String
+  startLat      Float
+  startLng      Float
+
+  // The FINAL destination. Any intermediate destinations the host wants to
+  // route through on the way (e.g. "lunch in Springfield, then the cabin")
+  // live in Waypoint below, ordered before this one.
+  destLabel     String
+  destLat       Float
+  destLng       Float
+
+  routeLocked   Boolean  @default(false)
+  routePolyline String?  // encoded Google/Mapbox-compatible polyline for the confirmed route
+  routeDistanceM Float?  // total route length in meters, summed across every leg
+  routeDurationS Int?    // estimated duration in seconds, summed across every leg
+  routeSummary  String?  // e.g. "Highway run" or "via I-80 → via US-101"
+  staggerAlertM Float    @default(7000) // gap (meters) that triggers a straggler alert
+
+  createdAt     DateTime @default(now())
+  lockedAt      DateTime?
+
+  members       ConvoyMember[]
+  waypoints     Waypoint[]
+  stops         Stop[]
+  messages      Message[]
+  proposals     RouteProposal[]
+  expenses      Expense[]
+  people        Person[]
+  categories    ExpenseCategory[]
+  expenseSessions ExpenseSession[]
+}
+
+/// An intermediate destination between the start and the final destination
+/// — the route is planned to actually pass through these, in order, not
+/// just note them as markers. (Contrast with Stop below, which plots a
+/// fuel/food/rest point *along* an already-chosen route rather than
+/// influencing what that route is.)
+model Waypoint {
+  id       String @id @default(uuid())
+  convoyId String
+  convoy   Convoy @relation(fields: [convoyId], references: [id])
+  label    String
+  lat      Float
+  lng      Float
+  order    Int
+}
+
+model ConvoyMember {
+  id          String   @id @default(uuid())
+  convoyId    String
+  convoy      Convoy   @relation(fields: [convoyId], references: [id])
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  role        String   @default("client") // host | client
+  vehicleName String
+  passengers  Int      @default(1)
+  joinedAt    DateTime @default(now())
+
+  // Live state — updated on every location ping, not versioned/historized.
+  lastLat        Float?
+  lastLng        Float?
+  distanceAlongM Float?   // meters covered along the locked route; drives lead/gap calc
+  lastPingAt     DateTime?
+  status         String   @default("ok") // ok | behind | stopped | emergency
+
+  @@unique([convoyId, userId])
+}
+
+model Stop {
+  id        String  @id @default(uuid())
+  convoyId  String
+  convoy    Convoy  @relation(fields: [convoyId], references: [id])
+  label     String
+  lat       Float
+  lng       Float
+  distanceAlongM Float   // where this stop falls along the route, for ordering
+  kind      String  @default("waypoint") // fuel | food | rest | waypoint
+  order     Int
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  convoyId  String
+  convoy    Convoy   @relation(fields: [convoyId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  body      String
+  kind      String   @default("text") // text | quick_ping | system
+  createdAt DateTime @default(now())
+}
+
+model RouteProposal {
+  id           String   @id @default(uuid())
+  convoyId     String
+  convoy       Convoy   @relation(fields: [convoyId], references: [id])
+  proposedById String
+  summary      String
+  destLabel    String?
+  destLat      Float?
+  destLng      Float?
+  status       String   @default("pending") // pending | accepted | declined
+  createdAt    DateTime @default(now())
+}
+
+model Person {
+  id        String    @id @default(uuid())
+  name      String
+  userId    String?   // optional link to registered User
+  convoyId  String?   // optional link to Convoy
+  convoy    Convoy?   @relation(fields: [convoyId], references: [id])
+  createdAt DateTime  @default(now())
+  expenses  Expense[]
+}
+
+model ExpenseCategory {
+  id        String    @id @default(uuid())
+  name      String
+  icon      String    @default("category") // fuel, food, tolls, lodging, parking, other, etc.
+  userId    String?
+  convoyId  String?
+  convoy    Convoy?   @relation(fields: [convoyId], references: [id])
+  createdAt DateTime  @default(now())
+  expenses  Expense[]
+}
+
+model Expense {
+  id           String           @id @default(uuid())
+  convoyId     String?
+  convoy       Convoy?          @relation(fields: [convoyId], references: [id])
+  userId       String
+  user         User             @relation(fields: [userId], references: [id])
+  personId     String?
+  person       Person?          @relation(fields: [personId], references: [id], onDelete: SetNull)
+  paidByName   String
+  categoryId   String?
+  category     ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryName String
+  title        String
+  amount       Float
+  sessionId    String?
+  session      ExpenseSession?  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime         @default(now())
+}
+
+model ExpenseSession {
+  id           String    @id @default(uuid())
+  name         String
+  totalAmount  Float     @default(0)
+  peopleCount  Int       @default(1)
+  splitAmount  Float     @default(0)
+  participants String?   // JSON string of all participants, their paid amounts and balances
+  convoyId     String?
+  convoy       Convoy?   @relation(fields: [convoyId], references: [id], onDelete: SetNull)
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completedAt  DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  expenses     Expense[]
+}

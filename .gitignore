@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.db
+android/
+ios/
+build/
+.dart_tool/
+.flutter-plugins*
+*.lock

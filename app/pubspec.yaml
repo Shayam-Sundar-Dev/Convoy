@@ -1,0 +1,50 @@
+name: convoy
+description: Group road trip navigation for convoys of multiple vehicles.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # State management
+  provider: ^6.1.2
+
+  # Networking
+  http: ^1.2.2
+  socket_io_client: ^2.0.3+1
+
+  # Maps + location
+  mapbox_maps_flutter: ^2.4.0
+  geolocator: ^13.0.1
+  flutter_polyline_points: ^2.1.0
+  url_launcher: ^6.3.1
+
+  # Local persistence (auth token, cached convoy code)
+  shared_preferences: ^2.3.2
+
+  # Social Auth
+  google_sign_in: ^6.2.2
+  sign_in_with_apple: ^8.2.0
+
+  # Walkie-Talkie audio
+  record: ^7.1.1
+  audioplayers: ^6.8.1
+  path_provider: ^2.1.6
+
+  # UUID for local optimistic message ids
+  uuid: ^4.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
